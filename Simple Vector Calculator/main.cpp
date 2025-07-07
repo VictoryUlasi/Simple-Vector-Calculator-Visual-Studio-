@@ -9,6 +9,7 @@
 #include <Windows.h>  // For ClearScreen()
 #include <conio.h>    // For getch() to capture keyboard input
 #include <boost/tuple/tuple.hpp>
+#include <variant>
 
 #include "vector.hpp" // Custom vector class definitions
 #include "gnuplot-iostream.h"
@@ -16,27 +17,22 @@
 #define UPPER_MENU_BOUND 9 // Upper bound for valid menu option
 #define LOWER_MENU_BOUND 0 // Lower bound for valid menu option
 
-// Structure to store the result of a menu operation
-struct selectionResult
-{
-    Vector2D resultantVector2D_;                        // Result for 2D vector
-    Vector3D resultantVector3D_;                        // Result for 3D vector
-    std::pair<Vector2D, Vector2D> set2D;
-    std::pair<Vector3D, Vector3D> set3D;
-    double resultantScalar = 0.0;                       // Result for scalar
-    bool isScalar = false;                              // Flag: true if result is scalar
-    bool is3D = false;                                  // Flag: true if result is 3D vector
-    bool isPlot = false;
-    std::pair<bool, std::string> errFlag = { false, "" }; // Error flag and message
-};
-
 // Structure to store user vector input
 struct vectorInput
 {
     Vector2D vector2D_;   // 2D vector
     Vector3D vector3D_;   // 3D vector
-    double x = 0.0 , y = 0.0, z = 0.0; // Components
+    double x = 0.0, y = 0.0, z = 0.0; // Components
     bool is3D = false;    // Flag: true if input is 3D
+};
+
+// Structure to store the result of a menu operation
+struct selectionResult
+{
+    using ResultType = std::variant< std::monostate, double, Vector2D, Vector3D, std::pair<vectorInput,vectorInput> >;
+    ResultType resultant;
+    bool isPlot = false;
+    std::pair<bool, std::string> errFlag = { false, "" }; // Error flag and message
 };
 
 // Function prototypes
@@ -186,12 +182,11 @@ selectionResult performSelection(int userSelection)
         {
             if (firstVector.is3D)
             {
-                resultant.resultantVector3D_ = firstVector.vector3D_ + secondVector.vector3D_;
-                resultant.is3D = true;
+                resultant.resultant = firstVector.vector3D_ + secondVector.vector3D_;
             }
             else
             {
-                resultant.resultantVector2D_ = firstVector.vector2D_ + secondVector.vector2D_;
+                resultant.resultant = firstVector.vector2D_ + secondVector.vector2D_;
             }
         }
 
@@ -211,12 +206,11 @@ selectionResult performSelection(int userSelection)
         {
             if (firstVector.is3D)
             {
-                resultant.resultantVector3D_ = firstVector.vector3D_ - secondVector.vector3D_;
-                resultant.is3D = true;
+                resultant.resultant = firstVector.vector3D_ - secondVector.vector3D_;
             }
             else
             {
-                resultant.resultantVector2D_ = firstVector.vector2D_ - secondVector.vector2D_;
+                resultant.resultant = firstVector.vector2D_ - secondVector.vector2D_;
             }
         }
 
@@ -233,12 +227,11 @@ selectionResult performSelection(int userSelection)
 
         if (firstVector.is3D)
         {
-            resultant.resultantVector3D_ = firstVector.vector3D_ * scalar;
-            resultant.is3D = true;
+            resultant.resultant = firstVector.vector3D_ * scalar;
         }
         else
         {
-            resultant.resultantVector2D_ = firstVector.vector2D_ * scalar;
+            resultant.resultant = firstVector.vector2D_ * scalar;
         }
 
         break;
@@ -257,13 +250,12 @@ selectionResult performSelection(int userSelection)
         {
             if (firstVector.is3D)
             {
-                resultant.resultantScalar = firstVector.vector3D_.dotProduct(secondVector.vector3D_);
+                resultant.resultant = firstVector.vector3D_.dotProduct(secondVector.vector3D_);
             }
             else
             {
-                resultant.resultantScalar = firstVector.vector2D_.dotProduct(secondVector.vector2D_);
+                resultant.resultant = firstVector.vector2D_.dotProduct(secondVector.vector2D_);
             }
-            resultant.isScalar = true;
         }
 
         break;
@@ -282,11 +274,10 @@ selectionResult performSelection(int userSelection)
         {
             if (firstVector.is3D)
             {
-                resultant.resultantVector3D_ = firstVector.vector3D_.crossProduct(secondVector.vector3D_);
-                resultant.is3D = true;
+                resultant.resultant = firstVector.vector3D_.crossProduct(secondVector.vector3D_);
             }
             else
-                std::cout << "Cross Product Only On 3D vectors.";
+                std::cout << "Cross Product Only On 3D vectors."; //set error flag
         }
 
         break;
@@ -300,12 +291,11 @@ selectionResult performSelection(int userSelection)
 
         if (firstVector.is3D)
         {
-            resultant.resultantScalar = firstVector.vector3D_.magnitude();
+            resultant.resultant = firstVector.vector3D_.magnitude();
         }
         else
-            resultant.resultantScalar = firstVector.vector2D_.magnitude();
+            resultant.resultant = firstVector.vector2D_.magnitude();
 
-        resultant.isScalar = true;
         break;
     }
     case 7: // Angle Between two Vectors
@@ -321,14 +311,13 @@ selectionResult performSelection(int userSelection)
         {
             if (firstVector.is3D)
             {
-                resultant.resultantScalar = firstVector.vector3D_.angleBetween(secondVector.vector3D_);
+                resultant.resultant = firstVector.vector3D_.angleBetween(secondVector.vector3D_);
             }
             else
             {
-                resultant.resultantScalar = firstVector.vector2D_.angleBetween(secondVector.vector2D_);
+                resultant.resultant = firstVector.vector2D_.angleBetween(secondVector.vector2D_);
             }
         }
-        resultant.isScalar = true;
         break;
     }
     case 8: // Plot Two Vectors
@@ -342,9 +331,7 @@ selectionResult performSelection(int userSelection)
         }
         else
         {
-            plotVectors(firstVector, secondVector);
-
-            resultant.isPlot = true;
+                resultant.resultant = std::make_pair(firstVector,secondVector);
         }
         break;
     }
@@ -360,11 +347,14 @@ void plotVectors(vectorInput& firstVector, vectorInput& secondVector) {
     gp << "set title 'Normalized Vector Plot' font 'Helvetica, 15'\n";
     gp << "set xlabel 'X axis' font 'Helvetica, 12'\n";
     gp << "set ylabel 'Y axis' font 'Helvetica, 12'\n";
+    gp << "set zlabel 'Z axis' font 'Helvetica, 12'\n";
     gp << "set grid\n";
-    gp << "set xtics 0.1\n";
-    gp << "set ytics 0.1\n";
+    gp << "set xtics 0.5\n";
+    gp << "set ytics 0.5\n";
+    gp << "set ztics 0.5\n";
     gp << "set xrange[-1:1]\n";
     gp << "set yrange[-1:1]\n";
+    gp << "set zrange[-1:1]\n";
     gp << "set zeroaxis lt 1 linecolor -1 linewidth 1.000\n";
 
     if (!firstVector.is3D) {
@@ -387,6 +377,23 @@ void plotVectors(vectorInput& firstVector, vectorInput& secondVector) {
         gp.send(vector2);
         gp.send(vector3);
 
+    }
+    else {
+        Vector3D resultantVec = (firstVector.vector3D_ + secondVector.vector3D_).normalize();
+        firstVector.vector3D_ = firstVector.vector3D_.normalize();
+        secondVector.vector3D_ = secondVector.vector3D_.normalize();
+
+        std::vector<boost::tuple<double, double, double, double,double,double>> vector1 = { {0,0,0, firstVector.vector3D_.x , firstVector.vector3D_.y, firstVector.vector3D_.z} };
+        std::vector<boost::tuple<double, double, double, double,double,double>> vector2 = { {0,0,0, secondVector.vector3D_.x , secondVector.vector3D_.y, secondVector.vector3D_.z} };
+        std::vector<boost::tuple<double, double, double, double,double,double>> vector3 = { {0,0,0, resultantVec.x , resultantVec.y, resultantVec.z} };
+
+        gp << "splot '-' with vectors title 'Vector 1' lw 2,"
+            << "'-' with vectors title 'Vector 2' lw 2,"
+            << "'-' with vectors title 'Resultant Vector' lw 3\n";
+
+        gp.send(vector1);
+        gp.send(vector2);
+        gp.send(vector3);
     }
 
 #ifdef _WIN32
@@ -454,30 +461,33 @@ void processResult(int userSelection)
             ClearScreen();
             std::cout << result.errFlag.second << std::endl;
         }
-        else if(result.isPlot)
+        else if (std::holds_alternative<std::pair< vectorInput, vectorInput>>(result.resultant))
         {
-           //IMPLEMENT STD::VARIANT in selectionResult struct and then plot in here.
+            vectorInput v1 = std::get<std::pair< vectorInput, vectorInput>>(result.resultant).first;
+            vectorInput v2 = std::get<std::pair< vectorInput, vectorInput>>(result.resultant).second;
+
+            plotVectors(v1,v2);
         }
         else
         {
-            if (result.isScalar) // Show scalar result
+            if (std::holds_alternative<double>(result.resultant)) // Show scalar result
             {
                 ClearScreen();
-                std::cout << "Resultant Scalar: " << "[" << result.resultantScalar << "]" << std::endl;
+                std::cout << "Resultant Scalar: " << "[" << get<double>(result.resultant) << "]" << std::endl;
                 _getch();
             }
             else
             {
-                if (result.is3D) // Show 3D vector result
+                if (std::holds_alternative<Vector3D>(result.resultant)) // Show 3D vector result
                 {
                     ClearScreen();
-                    std::cout << "Resultant Vector: " << "[" << result.resultantVector3D_.x << ", " << result.resultantVector3D_.y << ", " << result.resultantVector3D_.z << "]" << std::endl;
+                    std::cout << "Resultant Vector: " << "[" << get<Vector3D>(result.resultant).x << ", " << get<Vector3D>(result.resultant).y << ", " << get<Vector3D>(result.resultant).z << "]" << std::endl;
                     _getch();
                 }
                 else // Show 2D vector result
                 {
                     ClearScreen();
-                    std::cout << "Resultant Vector: " << "[" << result.resultantVector2D_.x << ", " << result.resultantVector2D_.y << "]" << std::endl;
+                    std::cout << "Resultant Vector: " << "[" << get<Vector2D>(result.resultant).x << ", " << get<Vector2D>(result.resultant).y << "]" << std::endl;
                     _getch();
                 }
             }
