@@ -53,7 +53,7 @@ double Vector2D::angleBetween(const Vector2D& other) const
 Vector2D Vector2D::normalize() const
 {
     double magnitude = this->magnitude();
-    return Vector2D((x / magnitude), (y / magnitude));
+    return Vector2D((x / magnitude), (y / magnitude)); //Implement no return, just do operation in function and return nothing so... this.x = x/magnitude etc...
 }
 
 // 3D VECTORS

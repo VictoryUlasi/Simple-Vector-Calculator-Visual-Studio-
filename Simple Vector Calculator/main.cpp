@@ -8,8 +8,10 @@
 #include <limits>
 #include <Windows.h>  // For ClearScreen()
 #include <conio.h>    // For getch() to capture keyboard input
+#include <boost/tuple/tuple.hpp>
+
 #include "vector.hpp" // Custom vector class definitions
-#include <fstream>
+#include "gnuplot-iostream.h"
 
 #define UPPER_MENU_BOUND 9 // Upper bound for valid menu option
 #define LOWER_MENU_BOUND 0 // Lower bound for valid menu option
@@ -19,9 +21,12 @@ struct selectionResult
 {
     Vector2D resultantVector2D_;                        // Result for 2D vector
     Vector3D resultantVector3D_;                        // Result for 3D vector
+    std::pair<Vector2D, Vector2D> set2D;
+    std::pair<Vector3D, Vector3D> set3D;
     double resultantScalar = 0.0;                       // Result for scalar
     bool isScalar = false;                              // Flag: true if result is scalar
     bool is3D = false;                                  // Flag: true if result is 3D vector
+    bool isPlot = false;
     std::pair<bool, std::string> errFlag = { false, "" }; // Error flag and message
 };
 
@@ -30,7 +35,7 @@ struct vectorInput
 {
     Vector2D vector2D_;   // 2D vector
     Vector3D vector3D_;   // 3D vector
-    double x, y, z = 0.0; // Components
+    double x = 0.0 , y = 0.0, z = 0.0; // Components
     bool is3D = false;    // Flag: true if input is 3D
 };
 
@@ -45,6 +50,7 @@ std::pair<vectorInput, vectorInput> readTwoVectors();
 double readScalar();
 bool haveSameDimensions(const vectorInput& v1, const vectorInput& v2);
 void processResult(int userSelection);
+void plotVectors(vectorInput& firstVector, vectorInput& secondVector);
 void ClearScreen();
 
 int main()
@@ -167,6 +173,7 @@ selectionResult performSelection(int userSelection)
     switch (userSelection)
     {
     case 1: // Vector Addition
+    {
         std::tie(firstVector, secondVector) = readTwoVectors();
 
         if (!haveSameDimensions(firstVector, secondVector))
@@ -189,7 +196,9 @@ selectionResult performSelection(int userSelection)
         }
 
         break;
+    }
     case 2: // Vector Subtraction
+    {
         std::tie(firstVector, secondVector) = readTwoVectors();
 
         if (!haveSameDimensions(firstVector, secondVector))
@@ -212,6 +221,7 @@ selectionResult performSelection(int userSelection)
         }
 
         break;
+    }
     case 3: // Scalar Multiplication
     {       // Squiggly Brackets needed here to declare line in scope of case 3,
         std::string line;
@@ -234,6 +244,7 @@ selectionResult performSelection(int userSelection)
         break;
     }
     case 4: // Dot Product
+    {
         std::tie(firstVector, secondVector) = readTwoVectors();
 
         if (!haveSameDimensions(firstVector, secondVector))
@@ -256,7 +267,9 @@ selectionResult performSelection(int userSelection)
         }
 
         break;
+    }
     case 5: // Cross Product (3D only)
+    {
         std::tie(firstVector, secondVector) = readTwoVectors();
 
         if (!haveSameDimensions(firstVector, secondVector))
@@ -277,7 +290,8 @@ selectionResult performSelection(int userSelection)
         }
 
         break;
-    case 6:
+    }
+    case 6: // Magnitude
     {
         std::string line;
         std::cout << "Enter the vector: ";
@@ -294,7 +308,8 @@ selectionResult performSelection(int userSelection)
         resultant.isScalar = true;
         break;
     }
-    case 7:
+    case 7: // Angle Between two Vectors
+    {
         std::tie(firstVector, secondVector) = readTwoVectors();
 
         if (!haveSameDimensions(firstVector, secondVector))
@@ -315,8 +330,9 @@ selectionResult performSelection(int userSelection)
         }
         resultant.isScalar = true;
         break;
-    case 8:
-        std::ofstream vectorFile("vectors.txt", std::ios::out);
+    }
+    case 8: // Plot Two Vectors
+    {
         std::tie(firstVector, secondVector) = readTwoVectors();
 
         if (!haveSameDimensions(firstVector, secondVector))
@@ -326,41 +342,60 @@ selectionResult performSelection(int userSelection)
         }
         else
         {
-            firstVector.vector3D_ = firstVector.vector3D_.normalize();
-            secondVector.vector3D_ = secondVector.vector3D_.normalize();
+            plotVectors(firstVector, secondVector);
 
-            firstVector.vector2D_ = firstVector.vector2D_.normalize();
-            secondVector.vector2D_ = secondVector.vector2D_.normalize();
-
-            if (firstVector.is3D)
-            {
-                vectorFile << firstVector.vector3D_.x << "," << firstVector.vector3D_.y << ',' << firstVector.vector3D_.z << std::endl;
-            }
-            else
-            {
-                vectorFile << firstVector.vector2D_.x << "," << firstVector.vector2D_.y << std::endl;
-            }
-
-            if (secondVector.is3D)
-            {
-                vectorFile << secondVector.vector3D_.x << "," << secondVector.vector3D_.y << ',' << secondVector.vector3D_.z << std::endl;
-                vectorFile << '3';
-            }
-            else
-            {
-                vectorFile << secondVector.vector2D_.x << "," << secondVector.vector2D_.y << std::endl;
-                vectorFile << '2';
-            }
-
-            resultant.errFlag.first = true;
-            resultant.errFlag.second = "Sent to Matlab";
+            resultant.isPlot = true;
         }
-
-        vectorFile.close();
         break;
+    }
     }
 
     return resultant;
+}
+
+void plotVectors(vectorInput& firstVector, vectorInput& secondVector) {
+    Gnuplot gp("\"C:\\Program Files\\gnuplot\\bin\\gnuplot.exe\"");
+
+    //Plane Customizations
+    gp << "set title 'Normalized Vector Plot' font 'Helvetica, 15'\n";
+    gp << "set xlabel 'X axis' font 'Helvetica, 12'\n";
+    gp << "set ylabel 'Y axis' font 'Helvetica, 12'\n";
+    gp << "set grid\n";
+    gp << "set xtics 0.1\n";
+    gp << "set ytics 0.1\n";
+    gp << "set xrange[-1:1]\n";
+    gp << "set yrange[-1:1]\n";
+    gp << "set zeroaxis lt 1 linecolor -1 linewidth 1.000\n";
+
+    if (!firstVector.is3D) {
+        Vector2D resultantVec = firstVector.vector2D_ + secondVector.vector2D_;
+        firstVector.vector2D_ = firstVector.vector2D_.normalize();
+        secondVector.vector2D_ = secondVector.vector2D_.normalize();
+        resultantVec = resultantVec.normalize();
+
+        std::vector<boost::tuple<double,double,double,double>> vector1 = { {0,0,firstVector.vector2D_.x , firstVector.vector2D_.y} };
+        std::vector<boost::tuple<double,double,double,double>> vector2 = { {0,0,secondVector.vector2D_.x , secondVector.vector2D_.y} };
+        std::vector<boost::tuple<double,double,double,double>> vector3 = { {0,0,resultantVec.x , resultantVec.y} };
+
+        gp << "plot '-' with vectors title 'Vector 1' lw 2,"
+            << "'-' with vectors title 'Vector 2' lw 2,"
+            << "'-' with vectors title 'Resultant Vector' lw 3\n";
+
+
+
+        gp.send(vector1);
+        gp.send(vector2);
+        gp.send(vector3);
+
+    }
+
+#ifdef _WIN32
+    // For Windows, prompt for a keystroke before the Gnuplot object goes out of scope so that
+    // the gnuplot window doesn't get closed.
+    std::cout << "Press enter to exit." << std::endl;
+    std::cin.get();
+#endif
+
 }
 
 std::pair<vectorInput, vectorInput> readTwoVectors()
@@ -418,6 +453,10 @@ void processResult(int userSelection)
         {
             ClearScreen();
             std::cout << result.errFlag.second << std::endl;
+        }
+        else if(result.isPlot)
+        {
+           //IMPLEMENT STD::VARIANT in selectionResult struct and then plot in here.
         }
         else
         {
